@@ -7,6 +7,7 @@ using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Media3D;
 using System.Windows.Shapes;
+using System.Windows.Threading;
 
 namespace CubeRightConstruct
 {
@@ -16,11 +17,11 @@ namespace CubeRightConstruct
         private int _cubeCount;
         private List<Point3D> _cubePositions = new List<Point3D>();
         private ModelVisual3D _cubeVisual;
-        private Canvas _drawingCanvas;
+        //private Canvas _drawingCanvas;
         private List<Button> _optionButtons = new List<Button>();
         private HashSet<Point> _correctPattern;
         private string _correctView;
-        private List<string> _views = new List<string> { "Top View", "Left View", "Front View" };
+        private List<string> _views = new List<string> { "Вид сверху", "Вид слева", "Вид спереди" };
         private bool _isProcessing = false;
         private bool _isDragging = false;
         private Point _lastMousePosition;
@@ -28,60 +29,27 @@ namespace CubeRightConstruct
         private double _phi = Math.PI / 4;   // Polar angle (vertical rotation)
         private double _radius = 7.071;      // Distance from camera to target (sqrt(5*5 + 5*5))
         private Point3D _target = new Point3D(0, 0, 0); // Camera orbits around this point
-
+        private DispatcherTimer statusTimer;
         public MainWindow()
         {
             InitializeComponent();
 
-            _drawingCanvas = new Canvas { Width = 420, Height = 420, Background = Brushes.White };
-
-            var stackPanel = new StackPanel { Margin = new Thickness(10) };
-            stackPanel.Children.Add(new TextBlock { Text = "Choose the correct 2D view:", Margin = new Thickness(5) });
-            stackPanel.Children.Add(_drawingCanvas);
-
-            var buttonPanel = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(5) };
-            var clearButton = new Button { Content = "Clear" };
-            clearButton.Click += ClearGrid_Click;
-            
-            buttonPanel.Children.Add(clearButton);
-         
-            stackPanel.Children.Add(buttonPanel);
-
-            var viewport = new Viewport3D
-            {
-                Camera = new PerspectiveCamera
-                {
-                    Position = new Point3D(5, 5, 5),
-                    LookDirection = new Vector3D(-5, -5, -5),
-                    UpDirection = new Vector3D(0, 1, 0),
-                    FieldOfView = 60
-                },
-                Margin = new Thickness(10)
-            };
-
-            // Add mouse event handlers for camera control
+            // Обработчики событий мыши уже назначены в XAML, но если нет, то можно назначить здесь
             viewport.MouseLeftButtonDown += Viewport_MouseLeftButtonDown;
             viewport.MouseMove += Viewport_MouseMove;
             viewport.MouseLeftButtonUp += Viewport_MouseLeftButtonUp;
 
-            var grid = new Grid
-            {
-                ColumnDefinitions =
-                {
-                    new ColumnDefinition { Width = new GridLength(2, GridUnitType.Star) },
-                    new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) }
-                }
-            };
-            grid.Children.Add(viewport);
-            Grid.SetColumn(stackPanel, 1);
-            grid.Children.Add(stackPanel);
-
-            Content = grid;
-
-            SetupLighting(viewport);
-            GenerateCubes(viewport);
+            GenerateCubes();
             ChooseRandomView();
             DrawViewOptions();
+
+            statusTimer = new DispatcherTimer();
+            statusTimer.Interval = TimeSpan.FromSeconds(2);
+            statusTimer.Tick += (s, e) =>
+            {
+                StatusText.Text = "";
+                statusTimer.Stop();
+            };
         }
 
         private void Viewport_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
@@ -137,16 +105,20 @@ namespace CubeRightConstruct
             viewport.Children.Add(lighting);
         }
 
-        private void GenerateCubes(Viewport3D viewport)
+        private void GenerateCubes()
         {
-            _cubeCount = _random.Next(3, 6);
+            _cubeCount = _random.Next(5, 8);
             _cubePositions.Clear();
 
-            var cubeGroup = new Model3DGroup();
+            cubeGroup.Children.Clear();
+
+            // Добавляем освещение (если нужно, можно оставить в XAML и не трогать)
+            cubeGroup.Children.Add(new AmbientLight(Colors.White));
+            cubeGroup.Children.Add(new DirectionalLight(Colors.White, new Vector3D(-1, -1, -1)));
+
             var occupiedPositions = new List<Point3D> { new Point3D(0, 0, 0) };
             _cubePositions.Add(new Point3D(0, 0, 0));
 
-            // Добавляем первый куб и его wireframe
             cubeGroup.Children.Add(CreateCube(0, 0, 0));
             var wireframe0 = CreateCubeWireframe();
             wireframe0.Transform = new TranslateTransform3D(0.5, 0.5, 0.5);
@@ -173,15 +145,9 @@ namespace CubeRightConstruct
                 AddPossiblePositions(newPosition, possiblePositions, occupiedPositions);
             }
 
-            if (_cubeVisual != null)
-            {
-                viewport.Children.Remove(_cubeVisual);
-            }
-            _cubeVisual = new ModelVisual3D { Content = cubeGroup };
-            viewport.Children.Add(_cubeVisual);
-
             UpdateCameraTarget();
         }
+
 
 
         private void UpdateCameraTarget()
@@ -192,7 +158,8 @@ namespace CubeRightConstruct
                 double avgY = _cubePositions.Average(p => p.Y);
                 double avgZ = _cubePositions.Average(p => p.Z);
                 _target = new Point3D(avgX + 0.5, avgY + 0.5, avgZ + 0.5); // Center of cubes
-                var camera = (PerspectiveCamera)((Viewport3D)VisualTreeHelper.GetChild((Grid)Content, 0)).Camera;
+                var camera = (PerspectiveCamera)viewport.Camera;
+
                 camera.LookDirection = _target - camera.Position;
             }
         }
@@ -249,7 +216,7 @@ namespace CubeRightConstruct
             mesh.Positions = points;
             mesh.TriangleIndices = indices;
 
-            var color = Color.FromRgb((byte)_random.Next(256), (byte)_random.Next(256), (byte)_random.Next(256));
+            var color = Color.FromRgb(65, 105, 225);
             return new GeometryModel3D
             {
                 Geometry = mesh,
@@ -261,7 +228,7 @@ namespace CubeRightConstruct
 
         private void DrawViewOptions()
         {
-            _drawingCanvas.Children.Clear();
+            drawingCanvas.Children.Clear();
             _optionButtons.Clear();
 
             _correctPattern = GetViewPattern(_correctView);
@@ -281,15 +248,15 @@ namespace CubeRightConstruct
             // Add view label
             TextBlock viewLabel = new TextBlock
             {
-                Text = $"View: {_correctView}",
+                Text = $"Вид: {_correctView}",
                 Foreground = Brushes.Black,
                 FontSize = 16,
                 HorizontalAlignment = HorizontalAlignment.Center,
                 Margin = new Thickness(0, 0, 0, 10)
             };
-            _drawingCanvas.Children.Add(viewLabel);
+            drawingCanvas.Children.Add(viewLabel);
             Canvas.SetTop(viewLabel, 0);
-            Canvas.SetLeft(viewLabel, _drawingCanvas.Width / 2 - viewLabel.Text.Length * 4);
+            Canvas.SetLeft(viewLabel, drawingCanvas.Width / 2 - viewLabel.Text.Length * 4);
 
             for (int i = 0; i < 4; i++)
             {
@@ -299,23 +266,25 @@ namespace CubeRightConstruct
                     Content = CreateOptionCanvas(options[localIndex]),
                     Width = 100,
                     Height = 100,
-                    Margin = new Thickness(5),
+                    Margin = new Thickness(2), // Меньше отступ!
                     Tag = options[localIndex]
                 };
                 button.Click -= CheckAnswer;
                 button.Click += CheckAnswer;
                 _optionButtons.Add(button);
-                _drawingCanvas.Children.Add(button);
+                drawingCanvas.Children.Add(button);
             }
 
+            // Новые координаты для меньшего расстояния:
             Canvas.SetLeft(_optionButtons[0], 0);
             Canvas.SetTop(_optionButtons[0], 30);
-            Canvas.SetLeft(_optionButtons[1], 210);
+            Canvas.SetLeft(_optionButtons[1], 110);
             Canvas.SetTop(_optionButtons[1], 30);
             Canvas.SetLeft(_optionButtons[2], 0);
-            Canvas.SetTop(_optionButtons[2], 240);
-            Canvas.SetLeft(_optionButtons[3], 210);
-            Canvas.SetTop(_optionButtons[3], 240);
+            Canvas.SetTop(_optionButtons[2], 140);
+            Canvas.SetLeft(_optionButtons[3], 110);
+            Canvas.SetTop(_optionButtons[3], 140);
+
         }
 
         private HashSet<Point> GenerateIncorrectOption(HashSet<Point> correctPattern)
@@ -431,7 +400,7 @@ namespace CubeRightConstruct
         }
         private Canvas CreateOptionCanvas(HashSet<Point> pattern)
         {
-            var canvas = new Canvas { Width = 200, Height = 200, Background = Brushes.White };
+            var canvas = new Canvas { Width = 100, Height = 100};
             foreach (var point in pattern)
             {
                 var rect = new Rectangle
@@ -457,23 +426,23 @@ namespace CubeRightConstruct
             double minZ = _cubePositions.Min(p => p.Z);
             double maxX = _cubePositions.Max(p => p.X);
 
-            if (view == "Top View")
+            if (view == "Вид сверху")
             {
                 var grouped = _cubePositions.GroupBy(p => new { p.X, p.Z }).Select(g => g.OrderByDescending(p => p.Y).First());
                 foreach (var pos in grouped)
                     pattern.Add(new Point((int)(pos.X - minX), (int)(pos.Z - minZ)));
             }
-            else if (view == "Left View")
+            else if (view == "Вид слева")
             {
                 var grouped = _cubePositions.GroupBy(p => new { p.Y, p.Z }).Select(g => g.OrderByDescending(p => p.X).First());
                 foreach (var pos in grouped)
                 {
                     int z = (int)(pos.Z - minZ);
                     int y = (int)(pos.Y - minY);
-                    pattern.Add(new Point(2 - z, 2 - y));
+                    pattern.Add(new Point(3 - z, 2 - y));
                 }
             }
-            else if (view == "Front View")
+            else if (view == "Вид спереди")
             {
                 var grouped = _cubePositions.GroupBy(p => new { p.X, p.Y }).Select(g => g.OrderByDescending(p => p.Z).First());
                 double maxHeight = _cubePositions.Max(p => p.Y) - minY;
@@ -519,7 +488,7 @@ namespace CubeRightConstruct
                 bool isCorrect = _correctPattern.SetEquals(selectedPattern);
                 if (isCorrect)
                 {
-                    MessageBox.Show("Correct!");
+                    ShowStatus("Верно");
                     Dispatcher.BeginInvoke(new Action(() =>
                     {
                         Restart();
@@ -528,7 +497,8 @@ namespace CubeRightConstruct
                 }
                 else
                 {
-                    MessageBox.Show($"Incorrect. The correct view is {_correctView}. Try again!");
+                    ShowStatus("Неверно");
+
                     _isProcessing = false;
                 }
             }
@@ -537,7 +507,13 @@ namespace CubeRightConstruct
                 _isProcessing = false;
             }
         }
-
+        private void ShowStatus(string message)
+        {
+            StatusText.Text = message;
+            StatusText.Visibility = Visibility.Visible;
+            statusTimer.Stop(); // сбрасываем, если таймер уже бежит
+            statusTimer.Start(); // запускаем заново
+        }
         private void ClearGrid_Click(object sender, RoutedEventArgs e)
         {
             if (_isProcessing) return;
@@ -559,7 +535,9 @@ namespace CubeRightConstruct
 
         private void Restart()
         {
-            var viewport = (Viewport3D)VisualTreeHelper.GetChild((Grid)Content, 0);
+          
+         //   viewport.Children.Clear();
+
 
             if (_cubeVisual != null)
             {
@@ -567,9 +545,14 @@ namespace CubeRightConstruct
                 _cubeVisual = null;
             }
 
-            GenerateCubes(viewport);
+            GenerateCubes();
             ChooseRandomView();
             DrawViewOptions();
+        }
+
+        private void ExitButton_Click(object sender, RoutedEventArgs e)
+        {
+            Close();
         }
     }
 }
