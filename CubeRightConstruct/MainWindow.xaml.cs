@@ -197,6 +197,21 @@ namespace CubeRightConstruct
                 var newPosition = possiblePositions[index];
                 possiblePositions.RemoveAt(index);
 
+                // Check if adding this cube exceeds the 5-cube limit in any dimension
+                var tempPositions = new List<Point3D>(occupiedPositions) { newPosition };
+                double minX = tempPositions.Min(p => p.X);
+                double maxX = tempPositions.Max(p => p.X);
+                double minY = tempPositions.Min(p => p.Y);
+                double maxY = tempPositions.Max(p => p.Y);
+                double minZ = tempPositions.Min(p => p.Z);
+                double maxZ = tempPositions.Max(p => p.Z);
+
+                if (maxX - minX >= 5 || maxY - minY >= 5 || maxZ - minZ >= 5)
+                {
+                    // Skip this position and try another
+                    continue;
+                }
+
                 cubeGroup.Children.Add(CreateCube(newPosition.X, newPosition.Y, newPosition.Z));
 
                 var wireframe = CreateCubeWireframe();
@@ -225,6 +240,20 @@ namespace CubeRightConstruct
             };
             foreach (var pos in directions)
             {
+                // Check if the new position would exceed the 5-cube limit
+                var tempPositions = new List<Point3D>(occupiedPositions) { pos };
+                double minX = tempPositions.Min(p => p.X);
+                double maxX = tempPositions.Max(p => p.X);
+                double minY = tempPositions.Min(p => p.Y);
+                double maxY = tempPositions.Max(p => p.Y);
+                double minZ = tempPositions.Min(p => p.Z);
+                double maxZ = tempPositions.Max(p => p.Z);
+
+                if (maxX - minX >= 5 || maxY - minY >= 5 || maxZ - minZ >= 5)
+                {
+                    continue;
+                }
+
                 if (!occupiedPositions.Contains(pos) && !possiblePositions.Contains(pos))
                     possiblePositions.Add(pos);
             }
@@ -419,14 +448,14 @@ namespace CubeRightConstruct
             {
                 var rect = new Rectangle
                 {
-                    Width = 20,
-                    Height = 20,
+                    Width = 19,
+                    Height = 19,
                     Fill = Brushes.Yellow,
                     Stroke = Brushes.Black,
                     StrokeThickness = 1
                 };
-                Canvas.SetLeft(rect, point.X * 20);
-                Canvas.SetTop(rect, point.Y * 20);
+                Canvas.SetLeft(rect, point.X * 19);
+                Canvas.SetTop(rect, point.Y * 19);
                 canvas.Children.Add(rect);
             }
             return canvas;
@@ -439,7 +468,7 @@ namespace CubeRightConstruct
             double minY = _cubePositions.Min(p => p.Y);
             double minZ = _cubePositions.Min(p => p.Z);
             double maxX = _cubePositions.Max(p => p.X);
-
+            double maxY = _cubePositions.Max(p => p.Y);
             if (view == "Вид сверху")
             {
                 var grouped = _cubePositions.GroupBy(p => new { p.X, p.Z }).Select(g => g.OrderByDescending(p => p.Y).First());
@@ -452,8 +481,8 @@ namespace CubeRightConstruct
                 foreach (var pos in grouped)
                 {
                     int z = (int)(pos.Z - minZ);
-                    int y = (int)(pos.Y - minY);
-                    pattern.Add(new Point(3 - z, 2 - y));
+                    int y = (int)(maxY - pos.Y);
+                    pattern.Add(new Point(z, y));
                 }
             }
             else if (view == "Вид спереди")
