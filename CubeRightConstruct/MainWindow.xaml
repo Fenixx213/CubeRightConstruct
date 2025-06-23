@@ -13,10 +13,7 @@
         </Grid.ColumnDefinitions>
 
         <Border Background="WhiteSmoke" Padding="2.5" CornerRadius="4" BorderBrush="#ccc" BorderThickness="1">
-            <Viewport3D x:Name="viewport" Grid.Column="0" Margin="10"
-            MouseLeftButtonDown="Viewport_MouseLeftButtonDown"
-            MouseMove="Viewport_MouseMove"
-            MouseLeftButtonUp="Viewport_MouseLeftButtonUp">
+            <Viewport3D x:Name="viewport" Grid.Column="0" Margin="10">
                 <Viewport3D.Camera>
                     <PerspectiveCamera x:Name="camera" Position="5,5,5" LookDirection="-5,-5,-5" UpDirection="0,1,0" FieldOfView="60"/>
                 </Viewport3D.Camera>
@@ -32,9 +29,8 @@
         </Border>
         <StackPanel Grid.Column="1" Margin="10" Background="AliceBlue">
             <TextBlock Text="Выберите правильный вид:" Margin="5"/>
-            <Canvas x:Name="drawingCanvas" Width="226" Height="239"  Margin="5"/>
-
-            <TextBlock x:Name="StatusText" Text="" FontSize="26"  FontWeight="SemiBold" Foreground="Crimson" TextWrapping="Wrap" Margin="5,0,0,5"/>
+            <Canvas x:Name="drawingCanvas" Width="226" Height="239" Margin="5"/>
+            <TextBlock x:Name="StatusText" Text="" FontSize="26" FontWeight="SemiBold" Foreground="Crimson" TextWrapping="Wrap" Margin="5,0,0,5"/>
             <Grid Margin="0,10,0,0">
                 <Grid.RowDefinitions>
                     <RowDefinition Height="50" />
@@ -45,20 +41,20 @@
                     <ColumnDefinition Width="*" />
                     <ColumnDefinition Width="*" />
                 </Grid.ColumnDefinitions>
-                <Button x:Name="clearButton" Click="ClearGrid_Click" Grid.Column="0"        Content="🔄 Заново"
-Margin="5"
-Background="MediumBlue"
-Foreground="White"
-FontWeight="SemiBold"
-BorderThickness="0"
-Cursor="Hand">
+                <Button x:Name="clearButton" Click="ClearGrid_Click" Grid.Column="0" Content="🔄 Заново"
+                        Margin="5"
+                        Background="MediumBlue"
+                        Foreground="White"
+                        FontWeight="SemiBold"
+                        BorderThickness="0"
+                        Cursor="Hand">
                     <Button.Template>
                         <ControlTemplate TargetType="Button">
                             <Border x:Name="border"
-            Background="{TemplateBinding Background}"
-            CornerRadius="2"
-            BorderBrush="{TemplateBinding BorderBrush}"
-            BorderThickness="{TemplateBinding BorderThickness}">
+                                    Background="{TemplateBinding Background}"
+                                    CornerRadius="2"
+                                    BorderBrush="{TemplateBinding BorderBrush}"
+                                    BorderThickness="{TemplateBinding BorderThickness}">
                                 <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
                             </Border>
                             <ControlTemplate.Triggers>
@@ -75,25 +71,24 @@ Cursor="Hand">
                         </ControlTemplate>
                     </Button.Template>
                 </Button>
-
                 <Button Grid.Column="1"
-        Content="❌ Выход"
-        Margin="5"
-        Background="DarkRed"
-        Foreground="White"
-        FontWeight="SemiBold"
-        BorderThickness="0"
-        Cursor="Hand"
-        HorizontalAlignment="Stretch"
-        VerticalAlignment="Stretch"
-        Click="ExitButton_Click">
+                        Content="❌ Выход"
+                        Margin="5"
+                        Background="DarkRed"
+                        Foreground="White"
+                        FontWeight="SemiBold"
+                        BorderThickness="0"
+                        Cursor="Hand"
+                        HorizontalAlignment="Stretch"
+                        VerticalAlignment="Stretch"
+                        Click="ExitButton_Click">
                     <Button.Template>
                         <ControlTemplate TargetType="Button">
                             <Border x:Name="border"
-Background="{TemplateBinding Background}"
-CornerRadius="2"
-BorderBrush="{TemplateBinding BorderBrush}"
-BorderThickness="{TemplateBinding BorderThickness}">
+                                    Background="{TemplateBinding Background}"
+                                    CornerRadius="2"
+                                    BorderBrush="{TemplateBinding BorderBrush}"
+                                    BorderThickness="{TemplateBinding BorderThickness}">
                                 <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
                             </Border>
                             <ControlTemplate.Triggers>
@@ -110,9 +105,7 @@ BorderThickness="{TemplateBinding BorderThickness}">
                         </ControlTemplate>
                     </Button.Template>
                 </Button>
-
             </Grid>
         </StackPanel>
-
     </Grid>
 </Window>

@@ -17,31 +17,22 @@ namespace CubeRightConstruct
         private int _cubeCount;
         private List<Point3D> _cubePositions = new List<Point3D>();
         private ModelVisual3D _cubeVisual;
-        //private Canvas _drawingCanvas;
+        private ModelVisual3D _boundingCubeVisual;
         private List<Button> _optionButtons = new List<Button>();
         private HashSet<Point> _correctPattern;
         private string _correctView;
         private List<string> _views = new List<string> { "Вид сверху", "Вид слева", "Вид спереди" };
         private bool _isProcessing = false;
-        private bool _isDragging = false;
         private Point _lastMousePosition;
-        private double _theta = Math.PI / 4; // Azimuthal angle (horizontal rotation)
-        private double _phi = Math.PI / 4;   // Polar angle (vertical rotation)
-        private double _radius = 7.071;      // Distance from camera to target (sqrt(5*5 + 5*5))
-        private Point3D _target = new Point3D(0, 0, 0); // Camera orbits around this point
+        private double theta = Math.PI / 2; // Azimuth (horizontal angle)
+        private double phi = Math.PI / 3;   // Elevation (vertical angle)
+        private readonly double radius = 10; // Distance from camera to origin
+        private readonly double rotationSpeed = 0.005; // Adjusted for smoother camera rotation
         private DispatcherTimer statusTimer;
+
         public MainWindow()
         {
             InitializeComponent();
-
-            // Обработчики событий мыши уже назначены в XAML, но если нет, то можно назначить здесь
-            viewport.MouseLeftButtonDown += Viewport_MouseLeftButtonDown;
-            viewport.MouseMove += Viewport_MouseMove;
-            viewport.MouseLeftButtonUp += Viewport_MouseLeftButtonUp;
-
-            GenerateCubes();
-            ChooseRandomView();
-            DrawViewOptions();
 
             statusTimer = new DispatcherTimer();
             statusTimer.Interval = TimeSpan.FromSeconds(2);
@@ -50,50 +41,42 @@ namespace CubeRightConstruct
                 StatusText.Text = "";
                 statusTimer.Stop();
             };
+
+            // Initialize camera
+            var camera = new PerspectiveCamera
+            {
+                Position = new Point3D(0, 0, radius),
+                LookDirection = new Vector3D(0, 0, -radius),
+                UpDirection = new Vector3D(0, 1, 0),
+                FieldOfView = 60
+            };
+            viewport.Camera = camera;
+            UpdateCameraPosition();
+
+            // Setup lighting
+            SetupLighting(viewport);
+
+            // Generate cubes and bounding cube
+            GenerateCubes();
+            ChooseRandomView();
+            DrawViewOptions();
+            _boundingCubeVisual = CreateBoundingCube();
+            viewport.Children.Add(_boundingCubeVisual);
         }
 
-        private void Viewport_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+        private void UpdateCameraPosition()
         {
-            if (!_isProcessing)
-            {
-                _isDragging = true;
-                _lastMousePosition = e.GetPosition((Viewport3D)sender);
-                ((Viewport3D)sender).CaptureMouse();
-            }
-        }
+            // Clamp phi to avoid flipping at the poles
+            phi = Math.Max(0.1, Math.Min(Math.PI - 0.1, phi));
 
-        private void Viewport_MouseMove(object sender, MouseEventArgs e)
-        {
-            if (_isDragging && sender is Viewport3D viewport)
-            {
-                var currentPosition = e.GetPosition(viewport);
-                var delta = currentPosition - _lastMousePosition;
+            // Convert spherical coordinates to Cartesian coordinates
+            double x = -radius * Math.Sin(phi) * Math.Cos(theta);
+            double y = radius * Math.Cos(phi);
+            double z = radius * Math.Sin(phi) * Math.Sin(theta);
 
-                // Update angles based on mouse movement
-                _theta -= delta.X * 0.01; // Horizontal rotation
-                _phi = Math.Max(0.1, Math.Min(Math.PI - 0.1, _phi - delta.Y * 0.01)); // Vertical rotation, clamped to avoid flipping
-
-                // Update camera position using spherical coordinates
-                var camera = (PerspectiveCamera)viewport.Camera;
-                camera.Position = new Point3D(
-                    _target.X + _radius * Math.Sin(_phi) * Math.Cos(_theta),
-                    _target.Y + _radius * Math.Cos(_phi),
-                    _target.Z + _radius * Math.Sin(_phi) * Math.Sin(_theta)
-                );
-                camera.LookDirection = _target - camera.Position;
-                camera.UpDirection = new Vector3D(0, 1, 0);
-
-                _lastMousePosition = currentPosition;
-            }
-        }
-
-        private void Viewport_MouseLeftButtonUp(object sender, MouseButtonEventArgs e)
-        {
-            if (_isDragging)
-            {
-                _isDragging = false;
-                ((Viewport3D)sender).ReleaseMouseCapture();
-            }
+            var camera = (PerspectiveCamera)viewport.Camera;
+            camera.Position = new Point3D(x, y, z);
+            camera.LookDirection = new Vector3D(-x, -y, -z);
         }
 
         private void SetupLighting(Viewport3D viewport)
@@ -105,16 +88,96 @@ namespace CubeRightConstruct
             viewport.Children.Add(lighting);
         }
 
+        private ModelVisual3D CreateBoundingCube()
+        {
+            MeshGeometry3D mesh = new MeshGeometry3D();
+            double size = 50.0; // Large size for bounding cube
+
+            // Define the 8 vertices of the bounding cube
+            Point3DCollection positions = new Point3DCollection
+            {
+                new Point3D(-size, -size, -size),
+                new Point3D(size, -size, -size),
+                new Point3D(size, size, -size),
+                new Point3D(-size, size, -size),
+                new Point3D(-size, -size, size),
+                new Point3D(size, -size, size),
+                new Point3D(size, size, size),
+                new Point3D(-size, size, size)
+            };
+
+            // Define the triangles (two per face, 6 faces)
+            Int32Collection indices = new Int32Collection
+            {
+                // Front
+                0, 1, 2, 0, 2, 3,
+                // Back
+                5, 4, 7, 5, 7, 6,
+                // Left
+                4, 0, 3, 4, 3, 7,
+                // Right
+                1, 5, 6, 1, 6, 2,
+                // Top
+                3, 2, 6, 3, 6, 7,
+                // Bottom
+                4, 5, 1, 4, 1, 0
+            };
+
+            mesh.Positions = positions;
+            mesh.TriangleIndices = indices;
+
+            // Create a semi-transparent material
+            DiffuseMaterial material = new DiffuseMaterial(new SolidColorBrush(Color.FromArgb(50, 255, 255, 255)));
+
+            GeometryModel3D cubeModel = new GeometryModel3D
+            {
+                Geometry = mesh,
+                Material = material,
+                BackMaterial = material
+            };
+
+            ModelVisual3D modelVisual = new ModelVisual3D
+            {
+                Content = cubeModel
+            };
+
+            // Attach mouse events for camera rotation
+            viewport.MouseLeftButtonDown += (s, e) =>
+            {
+                if (!_isProcessing)
+                {
+                    _lastMousePosition = e.GetPosition(viewport);
+                    e.Handled = true;
+                }
+            };
+
+            viewport.MouseMove += (s, e) =>
+            {
+                if (e.LeftButton == MouseButtonState.Pressed && !_isProcessing)
+                {
+                    Point currentPosition = e.GetPosition(viewport);
+                    double deltaX = currentPosition.X - _lastMousePosition.X;
+                    double deltaY = currentPosition.Y - _lastMousePosition.Y;
+
+                    // Update angles for horizontal (theta) and vertical (phi) rotation
+                    theta -= deltaX * rotationSpeed;
+                    phi -= deltaY * rotationSpeed;
+
+                    UpdateCameraPosition();
+                    _lastMousePosition = currentPosition;
+                    e.Handled = true;
+                }
+            };
+
+            return modelVisual;
+        }
+
         private void GenerateCubes()
         {
-            _cubeCount = _random.Next(5, 8);
+            _cubeCount = _random.Next(7, 11);
             _cubePositions.Clear();
 
             cubeGroup.Children.Clear();
-
-            // Добавляем освещение (если нужно, можно оставить в XAML и не трогать)
-            cubeGroup.Children.Add(new AmbientLight(Colors.White));
-            cubeGroup.Children.Add(new DirectionalLight(Colors.White, new Vector3D(-1, -1, -1)));
 
             var occupiedPositions = new List<Point3D> { new Point3D(0, 0, 0) };
             _cubePositions.Add(new Point3D(0, 0, 0));
@@ -145,23 +208,7 @@ namespace CubeRightConstruct
                 AddPossiblePositions(newPosition, possiblePositions, occupiedPositions);
             }
 
-            UpdateCameraTarget();
-        }
-
-
-
-        private void UpdateCameraTarget()
-        {
-            if (_cubePositions.Count > 0)
-            {
-                double avgX = _cubePositions.Average(p => p.X);
-                double avgY = _cubePositions.Average(p => p.Y);
-                double avgZ = _cubePositions.Average(p => p.Z);
-                _target = new Point3D(avgX + 0.5, avgY + 0.5, avgZ + 0.5); // Center of cubes
-                var camera = (PerspectiveCamera)viewport.Camera;
-
-                camera.LookDirection = _target - camera.Position;
-            }
+            UpdateCameraPosition();
         }
 
         private void AddPossiblePositions(Point3D position, List<Point3D> possiblePositions, List<Point3D> occupiedPositions)
@@ -192,26 +239,26 @@ namespace CubeRightConstruct
             double centerZ = z + halfSize;
 
             var points = new Point3DCollection
-    {
-        new Point3D(centerX - halfSize, centerY - halfSize, centerZ - halfSize),
-        new Point3D(centerX + halfSize, centerY - halfSize, centerZ - halfSize),
-        new Point3D(centerX + halfSize, centerY + halfSize, centerZ - halfSize),
-        new Point3D(centerX - halfSize, centerY + halfSize, centerZ - halfSize),
-        new Point3D(centerX - halfSize, centerY - halfSize, centerZ + halfSize),
-        new Point3D(centerX + halfSize, centerY - halfSize, centerZ + halfSize),
-        new Point3D(centerX + halfSize, centerY + halfSize, centerZ + halfSize),
-        new Point3D(centerX - halfSize, centerY + halfSize, centerZ + halfSize)
-    };
+            {
+                new Point3D(centerX - halfSize, centerY - halfSize, centerZ - halfSize),
+                new Point3D(centerX + halfSize, centerY - halfSize, centerZ - halfSize),
+                new Point3D(centerX + halfSize, centerY + halfSize, centerZ - halfSize),
+                new Point3D(centerX - halfSize, centerY + halfSize, centerZ - halfSize),
+                new Point3D(centerX - halfSize, centerY - halfSize, centerZ + halfSize),
+                new Point3D(centerX + halfSize, centerY - halfSize, centerZ + halfSize),
+                new Point3D(centerX + halfSize, centerY + halfSize, centerZ + halfSize),
+                new Point3D(centerX - halfSize, centerY + halfSize, centerZ + halfSize)
+            };
 
             var indices = new Int32Collection
-    {
-        0,1,2, 0,2,3,
-        4,6,5, 4,7,6,
-        0,3,7, 0,7,4,
-        1,5,6, 1,6,2,
-        3,2,6, 3,6,7,
-        0,4,5, 0,5,1
-    };
+            {
+                0,1,2, 0,2,3,
+                4,6,5, 4,7,6,
+                0,3,7, 0,7,4,
+                1,5,6, 1,6,2,
+                3,2,6, 3,6,7,
+                0,4,5, 0,5,1
+            };
 
             mesh.Positions = points;
             mesh.TriangleIndices = indices;
@@ -225,6 +272,87 @@ namespace CubeRightConstruct
             };
         }
 
+        private GeometryModel3D CreateCubeWireframe()
+        {
+            MeshGeometry3D wireframeMesh = new MeshGeometry3D();
+            double size = 0.5;
+            double thickness = 0.015;
+
+            Point3D[] vertices = new Point3D[]
+            {
+                new Point3D(-size, -size, -size),
+                new Point3D(size, -size, -size),
+                new Point3D(size, size, -size),
+                new Point3D(-size, size, -size),
+                new Point3D(-size, -size, size),
+                new Point3D(size, -size, size),
+                new Point3D(size, size, size),
+                new Point3D(-size, size, size)
+            };
+
+            int[][] edges = new int[][]
+            {
+                new[] { 0, 1 }, new[] { 1, 2 }, new[] { 2, 3 }, new[] { 3, 0 },
+                new[] { 4, 5 }, new[] { 5, 6 }, new[] { 6, 7 }, new[] { 7, 4 },
+                new[] { 0, 4 }, new[] { 1, 5 }, new[] { 2, 6 }, new[] { 3, 7 }
+            };
+
+            Point3DCollection positions = new Point3DCollection();
+            Int32Collection indices = new Int32Collection();
+
+            for (int i = 0; i < edges.Length; i++)
+            {
+                Point3D start = vertices[edges[i][0]];
+                Point3D end = vertices[edges[i][1]];
+                Vector3D dir = end - start;
+                double length = dir.Length;
+                dir.Normalize();
+
+                Vector3D up = Math.Abs(dir.Y) < 0.9 ? new Vector3D(0, 1, 0) : new Vector3D(0, 0, 1);
+                Vector3D right = Vector3D.CrossProduct(dir, up);
+                right.Normalize();
+                up = Vector3D.CrossProduct(right, dir);
+                up.Normalize();
+
+                Point3D[] crossSectionStart = new Point3D[4];
+                Point3D[] crossSectionEnd = new Point3D[4];
+                for (int j = 0; j < 4; j++)
+                {
+                    double angle = j * Math.PI / 2;
+                    Vector3D offset = (Math.Cos(angle) * right + Math.Sin(angle) * up) * thickness;
+                    crossSectionStart[j] = start + offset;
+                    crossSectionEnd[j] = end + offset;
+                }
+
+                int baseIndex = positions.Count;
+                foreach (var p in crossSectionStart) positions.Add(p);
+                foreach (var p in crossSectionEnd) positions.Add(p);
+
+                int[] sideIndices = new int[]
+                {
+                    0, 1, 5, 0, 5, 4,
+                    1, 2, 6, 1, 6, 5,
+                    2, 3, 7, 2, 7, 6,
+                    3, 0, 4, 3, 4, 7
+                };
+                foreach (int idx in sideIndices)
+                {
+                    indices.Add(baseIndex + idx);
+                }
+            }
+
+            wireframeMesh.Positions = positions;
+            wireframeMesh.TriangleIndices = indices;
+
+            GeometryModel3D wireframeModel = new GeometryModel3D
+            {
+                Geometry = wireframeMesh,
+                Material = new DiffuseMaterial(new SolidColorBrush(Color.FromRgb(0, 0, 0))),
+                BackMaterial = new DiffuseMaterial(new SolidColorBrush(Color.FromRgb(0, 0, 0)))
+            };
+
+            return wireframeModel;
+        }
 
         private void DrawViewOptions()
         {
@@ -245,7 +373,6 @@ namespace CubeRightConstruct
 
             options = options.OrderBy(x => _random.Next()).ToList();
 
-            // Add view label
             TextBlock viewLabel = new TextBlock
             {
                 Text = $"Вид: {_correctView}",
@@ -266,7 +393,7 @@ namespace CubeRightConstruct
                     Content = CreateOptionCanvas(options[localIndex]),
                     Width = 100,
                     Height = 100,
-                    Margin = new Thickness(2), // Меньше отступ!
+                    Margin = new Thickness(2),
                     Tag = options[localIndex]
                 };
                 button.Click -= CheckAnswer;
@@ -275,7 +402,6 @@ namespace CubeRightConstruct
                 drawingCanvas.Children.Add(button);
             }
 
-            // Новые координаты для меньшего расстояния:
             Canvas.SetLeft(_optionButtons[0], 0);
             Canvas.SetTop(_optionButtons[0], 30);
             Canvas.SetLeft(_optionButtons[1], 110);
@@ -284,123 +410,11 @@ namespace CubeRightConstruct
             Canvas.SetTop(_optionButtons[2], 140);
             Canvas.SetLeft(_optionButtons[3], 110);
             Canvas.SetTop(_optionButtons[3], 140);
-
         }
 
-        private HashSet<Point> GenerateIncorrectOption(HashSet<Point> correctPattern)
-        {
-            HashSet<Point> incorrectPattern = new HashSet<Point>(correctPattern);
-            if (incorrectPattern.Count > 1)
-            {
-                incorrectPattern.Remove(incorrectPattern.First());
-            }
-            else
-            {
-                incorrectPattern.Add(new Point(_random.Next(3), _random.Next(3)));
-            }
-            return incorrectPattern;
-        }
-        private GeometryModel3D CreateCubeWireframe()
-        {
-            MeshGeometry3D wireframeMesh = new MeshGeometry3D();
-            double size = 0.5; // Cube size (same as main cube)
-            double thickness = 0.015; // Thickness of the wireframe edges (reduced to avoid overlap)
-
-            // Define the 8 vertices of the cube
-            Point3D[] vertices = new Point3D[]
-            {
-                new Point3D(-size, -size, -size),
-                new Point3D(size, -size, -size),
-                new Point3D(size, size, -size),
-                new Point3D(-size, size, -size),
-                new Point3D(-size, -size, size),
-                new Point3D(size, -size, size),
-                new Point3D(size, size, size),
-                new Point3D(-size, size, size)
-            };
-
-            // Define the 12 edges of the cube by connecting vertices
-            int[][] edges = new int[][]
-            {
-                new[] { 0, 1 }, // Bottom front
-                new[] { 1, 2 }, // Bottom right
-                new[] { 2, 3 }, // Bottom back
-                new[] { 3, 0 }, // Bottom left
-                new[] { 4, 5 }, // Top front
-                new[] { 5, 6 }, // Top right
-                new[] { 6, 7 }, // Top back
-                new[] { 7, 4 }, // Top left
-                new[] { 0, 4 }, // Front left vertical
-                new[] { 1, 5 }, // Front right vertical
-                new[] { 2, 6 }, // Back right vertical
-                new[] { 3, 7 }  // Back left vertical
-            };
-
-            Point3DCollection positions = new Point3DCollection();
-            Int32Collection indices = new Int32Collection();
-
-            // For each edge, create a thin rectangular prism (approximating a line)
-            for (int i = 0; i < edges.Length; i++)
-            {
-                Point3D start = vertices[edges[i][0]];
-                Point3D end = vertices[edges[i][1]];
-                Vector3D dir = end - start;
-                double length = dir.Length;
-                dir.Normalize();
-
-                // Define a small cross-section perpendicular to the edge direction
-                Vector3D up = Math.Abs(dir.Y) < 0.9 ? new Vector3D(0, 1, 0) : new Vector3D(0, 0, 1);
-                Vector3D right = Vector3D.CrossProduct(dir, up);
-                right.Normalize();
-                up = Vector3D.CrossProduct(right, dir);
-                up.Normalize();
-
-                // Create 4 vertices for the cross-section at start and end
-                Point3D[] crossSectionStart = new Point3D[4];
-                Point3D[] crossSectionEnd = new Point3D[4];
-                for (int j = 0; j < 4; j++)
-                {
-                    double angle = j * Math.PI / 2;
-                    Vector3D offset = (Math.Cos(angle) * right + Math.Sin(angle) * up) * thickness;
-                    crossSectionStart[j] = start + offset;
-                    crossSectionEnd[j] = end + offset;
-                }
-
-                // Add vertices to positions
-                int baseIndex = positions.Count;
-                foreach (var p in crossSectionStart) positions.Add(p);
-                foreach (var p in crossSectionEnd) positions.Add(p);
-
-                // Define triangles for the prism (4 sides, each with 2 triangles)
-                int[] sideIndices = new int[]
-                {
-                    0, 1, 5,  0, 5, 4, // Side 1
-                    1, 2, 6,  1, 6, 5, // Side 2
-                    2, 3, 7,  2, 7, 6, // Side 3
-                    3, 0, 4,  3, 4, 7  // Side 4
-                };
-                foreach (int idx in sideIndices)
-                {
-                    indices.Add(baseIndex + idx);
-                }
-            }
-
-            wireframeMesh.Positions = positions;
-            wireframeMesh.TriangleIndices = indices;
-
-            // Create black material for the wireframe
-            GeometryModel3D wireframeModel = new GeometryModel3D
-            {
-                Geometry = wireframeMesh,
-                Material = new DiffuseMaterial(new SolidColorBrush(Color.FromRgb(0, 0, 0))),
-                BackMaterial = new DiffuseMaterial(new SolidColorBrush(Color.FromRgb(0, 0, 0)))
-            };
-
-            return wireframeModel;
-        }
         private Canvas CreateOptionCanvas(HashSet<Point> pattern)
         {
-            var canvas = new Canvas { Width = 100, Height = 100};
+            var canvas = new Canvas { Width = 100, Height = 100 };
             foreach (var point in pattern)
             {
                 var rect = new Rectangle
@@ -472,6 +486,20 @@ namespace CubeRightConstruct
             return options;
         }
 
+        private HashSet<Point> GenerateIncorrectOption(HashSet<Point> correctPattern)
+        {
+            HashSet<Point> incorrectPattern = new HashSet<Point>(correctPattern);
+            if (incorrectPattern.Count > 1)
+            {
+                incorrectPattern.Remove(incorrectPattern.First());
+            }
+            else
+            {
+                incorrectPattern.Add(new Point(_random.Next(3), _random.Next(3)));
+            }
+            return incorrectPattern;
+        }
+
         private void ChooseRandomView()
         {
             int index = _random.Next(_views.Count);
@@ -498,7 +526,6 @@ namespace CubeRightConstruct
                 else
                 {
                     ShowStatus("Неверно");
-
                     _isProcessing = false;
                 }
             }
@@ -507,13 +534,15 @@ namespace CubeRightConstruct
                 _isProcessing = false;
             }
         }
+
         private void ShowStatus(string message)
         {
             StatusText.Text = message;
             StatusText.Visibility = Visibility.Visible;
-            statusTimer.Stop(); // сбрасываем, если таймер уже бежит
-            statusTimer.Start(); // запускаем заново
+            statusTimer.Stop();
+            statusTimer.Start();
         }
+
         private void ClearGrid_Click(object sender, RoutedEventArgs e)
         {
             if (_isProcessing) return;
@@ -525,8 +554,6 @@ namespace CubeRightConstruct
             }));
         }
 
-    
-
         private double maxY(IEnumerable<Point3D> points)
         {
             double minY = points.Min(p => p.Y);
@@ -535,10 +562,6 @@ namespace CubeRightConstruct
 
         private void Restart()
         {
-          
-         //   viewport.Children.Clear();
-
-
             if (_cubeVisual != null)
             {
                 viewport.Children.Remove(_cubeVisual);
@@ -548,6 +571,10 @@ namespace CubeRightConstruct
             GenerateCubes();
             ChooseRandomView();
             DrawViewOptions();
+            // Reset camera
+            theta = Math.PI / 2;
+            phi = Math.PI / 3;
+            UpdateCameraPosition();
         }
 
         private void ExitButton_Click(object sender, RoutedEventArgs e)
